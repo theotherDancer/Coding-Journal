@@ -5,7 +5,7 @@
 ## 牛客刷题记录
 
 - [2026-11-14 · 未完成 · 初步接触刷题](#day-2026-11-14)
-- [2026-11-15 · 两组 Java 专项练习与错题复盘](#day-2026-11-15)
+- [2026-11-15 · Java 与 MySQL 知识点复盘](#day-2026-11-15)
 
 <a name="day-2026-11-14"></a>
 
@@ -29,23 +29,31 @@
 
 <a name="day-2026-11-15"></a>
 
-### 2026-11-15 · 两组 Java 专项练习与错题复盘
+### 2026-11-15 · Java 与 MySQL 知识点复盘
 
-今天继续做牛客专项练习，两组各答对 **3/5（60%）**。第一组错在布尔赋值和 MySQL 字符串拼接。第二组留空了 `HashMap` 树化题，抽象类与接口的多选题漏了两项。
+#### 赋值、比较与 `if` 条件
 
-#### 为什么 `if (flag = true)` 打印 `true`？
+`=` 修改变量，赋值表达式的值是赋入的值。`==` 比较两边，产生一个布尔结果，变量保持原值。以 `Boolean flag = false` 为初值，`if (flag = true)` 会把 `flag` 改成 `true` 并进入 `if` 分支。单独从同一个初值出发，`if (flag == true)` 会比较 `false` 和 `true`，因此跳过 `if` 分支。`Boolean` 包装对象在这些判断中会自动拆箱成 `boolean`。
 
-我原选 D，正确是 C。从 `Boolean flag = false` 出发，`flag = true` 先把 `true` 写进 `flag`，赋值表达式再把这个值交给 `if`，判断时自动拆箱。写成 `flag == true` 则会比较原来的 `false` 和 `true`，比较结果为 `false`，`flag` 仍是 `false`。
+#### 前置自增、后置自增与三元运算符
 
-#### MySQL 用什么拼接字符串？
+`i++` 和 `++i` 都让 `i` 加 1。`i++` 的表达式值是旧值，`++i` 的表达式值是新值。读代码时，把变量的新值和表达式交给外层的值分别记下来。
 
-我原选 A `+`，正确是 C `||`。MySQL 的 `+` 用于数值加法，`SELECT '12' + '34';` 得到 `46`。拼接可以写 `SELECT CONCAT('12', '34');`，得到字符串 `1234`。启用题目指定的 `PIPES_AS_CONCAT` 模式后，`SELECT 'Java' || 'Web';` 得到 `JavaWeb`。我在复盘中答对了这个例子。 [MySQL 手册](https://dev.mysql.com/doc/refman/8.4/en/sql-mode.html#sqlmode_pipes_as_concat)
+```java
+int i = 0;
+int a = i++;                // a = 0，i = 1
+int b = ++a;                // a = 1，b = 1
+int c = a + b;              // c = 2
+int d = (a == 1) ? b : c;    // 条件成立，取 b，d = 1
+```
 
-#### 抽象类的构造方法什么时候会执行？
+三元运算符 `条件 ? 真分支 : 假分支` 会先判断条件，然后只求值被选中的分支。在 `while` 中，条件也会先完整求值。若 `x` 从 0 开始，`while (++x < 5) { x += 1; }` 的循环体运行两次，把 `x` 分别加到 2 和 4。第三次判断时 `++x` 把它改成 5，随后条件为假，退出时 `x` 就是 5。
 
-我在「Java 8 之前」这道多选题只选了 D，正确答案是 ABD。一个类只能有一个直接父类，可以实现多个接口。抽象类可以声明实例字段和构造方法，子类构造时能调用它。接口没有构造方法，字段隐式为 `public static final`。抽象类可以有静态方法，接口从 Java 8 起才支持。 [Java 7 类规范](https://docs.oracle.com/javase/specs/jls/se7/html/jls-8.html) · [Java 7 接口规范](https://docs.oracle.com/javase/specs/jls/se7/html/jls-9.html) · [Java 8 接口规范](https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.4)
+#### 构造方法、抽象类与接口
 
-用 `Person` 和 `Student` 推演了两个情况。父类只有 `Person(String name)` 时，子类省略 `super(name)` 会隐式尝试调用 `super()`，因此编译失败。父类加上可访问的 `Person() {}` 后，以下代码可以编译。创建 `new Student("小明")` 时，若 `Student` 构造方法没有给字段赋值，`name` 仍是 `null`。在该构造方法里写 `super(name);` 则会把 `name` 初始化为 `"小明"`。
+构造方法与类同名，省略返回类型。`void Student()` 会被识别为普通方法。对于普通顶层类，只有类中没有声明任何构造方法时，编译器才会补默认的无参构造方法。同类构造方法可以用 `this(...)` 委托初始化，比如 `Student()` 用 `this("未命名")` 调用 `Student(String name)`，这两个调用处理的是同一个对象。 [Java 语言规范 · 构造方法](https://docs.oracle.com/javase/specs/jls/se25/html/jls-8.html#jls-8.8)
+
+抽象类可以有构造方法和实例字段。创建具体子类对象时，父类构造方法会参与初始化。下面两个 `Student` 构造方法各走一条路径。
 
 ```java
 abstract class Person {
@@ -59,18 +67,40 @@ abstract class Person {
 }
 
 class Student extends Person {
+    Student() {
+        // 隐式调用 Person()，name 的值仍为 null。
+    }
+
     Student(String name) {
-        // 这里隐式调用 Person()。
+        super(name); // 调用 Person(String)，初始化 name。
     }
 }
 ```
 
-#### 其他题的复习要点
+删掉 `Person()` 后，上面的 `Student()` 会编译报错，因为它隐式调用的 `super()` 找不到可访问的无参构造方法。接口没有构造方法，接口字段隐式为 `public static final`。一个类只有一个直接父类，可以实现多个接口。抽象类可以定义静态方法，接口从 Java 8 起才支持静态方法。 [Java 7 类规范](https://docs.oracle.com/javase/specs/jls/se7/html/jls-8.html) · [Java 7 接口规范](https://docs.oracle.com/javase/specs/jls/se7/html/jls-9.html) · [Java 8 接口规范](https://docs.oracle.com/javase/specs/jls/se8/html/jls-9.html#jls-9.4)
 
-- **Socket。** 在客户端和服务端分别看同一条 TCP 连接时，各自的 `getLocalAddress()` 都读取本端地址。我判断出了服务端调用时读到的是服务器 IP。
-- **默认构造方法与重载。** `void Student() {}` 是普通方法。类没有声明构造方法时，编译器才补默认构造方法。无参构造可用 `this("未命名")` 调用同类的带参构造。我推对了直接写 `new Student("小明")` 只进入带参构造。 [Java 语言规范](https://docs.oracle.com/javase/specs/jls/se25/html/jls-8.html#jls-8.8)
-- **`List` 与 `Set`。** 添加两个相同的名字和两个 `null` 后，`ArrayList` 大小是 4，`HashSet` 大小是 2。支持 `null` 的 `Set` 至多保留一个 `null`。`List` 有位置顺序，`HashSet` 不保证遍历顺序。
-- **自增和三元运算符。** 从 `i = 0` 开始，`a = i++` 取旧值，所以 `a = 0`、`i = 1`。`b = ++a` 取新值，所以 `a = 1`、`b = 1`。`a == 1 ? b : c` 取 `b`，最终 `a` 和 `d` 都是 `1`。成绩页上的 `while (++x < 5)` 题也提示了同一规则，最后一次判断会先自增到 `5`，然后才退出循环。
-- **循环优化。** 牛客答案为 ABD。代码外提把循环内结果不变的计算移到循环前，强度削弱可用固定步长的递增代替每轮乘法，删除归纳变量则用已有变量接管循环控制。删除多余运算可在普通代码段中应用。 [GCC 循环优化文档](https://gcc.gnu.org/onlinedocs/gccint/Tree-SSA-passes.html)
+#### `List` 与 `Set` 的重复元素和遍历顺序
 
-**验证与下次起点。** 以上结果来自牛客成绩页和手算。IDEA 构造方法示例和 Workbench 的 SQL 示例待运行验证。下一道重点复习第二组留空的 `HashMap` 树化题。题目答案是 B，接下来结合 OpenJDK 源码区分桶内链表长度和数组容量。
+`ArrayList` 按位置保存元素，可以保留重复值和多个 `null`。`Set` 去重，允许 `null` 的实现至多保留一个 `null`。例如依次加入 `"小明"`、`"小明"`、`null`、`null`，`ArrayList.size()` 是 `4`，`HashSet.size()` 是 `2`。`HashSet` 不保证遍历顺序，`LinkedHashSet` 按插入顺序遍历。
+
+#### Socket 的本端和对端
+
+同一条 TCP 连接在两端各有一个 `Socket`。从哪个对象调用 `getLocalAddress()`，就读取它在本端绑定的 IP。客户端调用时读取客户端 IP，服务端用已接受的连接调用时读取服务端 IP。`getInetAddress()` 从当前连接读取对端 IP。 [Java Socket API](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/net/Socket.html#getLocalAddress())
+
+#### MySQL 字符串拼接和 SQL 模式
+
+MySQL 的 `+` 用于数值加法，`CONCAT()` 用于字符串拼接。默认情况下 `||` 表示逻辑或。启用 `PIPES_AS_CONCAT` 后，同一个 `||` 运算符表示字符串拼接。 [MySQL 字符串函数](https://dev.mysql.com/doc/refman/8.4/en/string-functions.html#function_concat) · [MySQL SQL 模式](https://dev.mysql.com/doc/refman/8.4/en/sql-mode.html#sqlmode_pipes_as_concat)
+
+```sql
+SELECT '12' + '34';         -- 数值 46
+SELECT CONCAT('12', '34');  -- 字符串 '1234'
+SELECT 'Java' || 'Web';     -- 启用 PIPES_AS_CONCAT 时得到 'JavaWeb'
+```
+
+#### 编译原理中的三种循环优化
+
+- **代码外提。** 如果 `width` 和 `height` 在循环中始终不变，并且提前求值能保持程序行为，就把 `width * height` 移到循环前，循环内复用结果。
+- **强度削弱。** 当 `i` 依次取 `0`、`1`、`2` 时，`4 * i` 依次是 `0`、`4`、`8`。可以用从 0 开始、每轮加 4 的 `offset` 得到相同序列。
+- **删除归纳变量。** 若 `i` 只用于控制上面的循环，已有的 `offset` 也可以用 `offset < 12` 控制同样的三次迭代，这时可以省掉 `i`。 [GCC 循环优化文档](https://gcc.gnu.org/onlinedocs/gccint/Tree-SSA-passes.html)
+
+**练习进度。** 上面的 Java 和 SQL 结果来自手算，IDEA 和 Workbench 实测待补。下一次看 OpenJDK 的 `HashMap` 源码，区分单个桶的链表长度和底层数组容量，再看什么时候扩容、什么时候树化。
