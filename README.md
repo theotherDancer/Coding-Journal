@@ -6,6 +6,7 @@
 
 - [2026-11-14 · 未完成 · 初步接触刷题](#day-2026-11-14)
 - [2026-11-15 · Java 与 MySQL 知识点复盘](#day-2026-11-15)
+- [2026-11-16 · Java 字段初始化、继承与垃圾回收](#day-2026-11-16)
 
 <a name="day-2026-11-14"></a>
 
@@ -104,3 +105,138 @@ SELECT 'Java' || 'Web';     -- 启用 PIPES_AS_CONCAT 时得到 'JavaWeb'
 - **删除归纳变量。** 若 `i` 只用于控制上面的循环，已有的 `offset` 也可以用 `offset < 12` 控制同样的三次迭代，这时可以省掉 `i`。 [GCC 循环优化文档](https://gcc.gnu.org/onlinedocs/gccint/Tree-SSA-passes.html)
 
 **练习进度。** 上面的 Java 和 SQL 结果来自手算，IDEA 和 Workbench 实测待补。下一次看 OpenJDK 的 `HashMap` 源码，区分单个桶的链表长度和底层数组容量，再看什么时候扩容、什么时候树化。
+
+<a name="day-2026-11-16"></a>
+
+### 2026-11-16 · Java 字段初始化、继承与垃圾回收
+
+#### `final` 实例字段什么时候必须赋值？
+
+`final` 字段赋值后可以读取，字段本身不能再被赋值。`final int i;` 只声明了字段，没有写初始值，这叫**空白 `final` 字段**。Java 要求构造方法每条正常完成的路径上都明确给这个字段赋值。可以在声明时给初值，也可以在构造方法或实例初始化块中赋值。 [Java 语言规范 · `final` 字段](https://docs.oracle.com/javase/specs/jls/se25/html/jls-8.html#jls-8.3.1.2)
+
+```java
+class Foo {
+    final int i;
+    int j;
+
+    void doSomething() {
+        System.out.println(++j + i);
+    }
+}
+```
+
+这段代码编译失败。`Foo` 没写构造方法，编译器补上的默认构造方法也没有给 `i` 赋值。即使把打印语句改成 `System.out.println(i);`，缺少赋值的问题仍然存在。普通的 `int` 实例字段 `j` 会以 `0` 为默认值。默认值无法满足 `final` 字段的明确赋值要求。
+
+在 `Foo` 里加入 `Foo() { i = 0; }` 后，第一次对新对象调用 `doSomething()`，`++j` 先把 `j` 从 `0` 加到 `1`，再计算 `1 + 0`，所以打印 `1`。对同一个对象再调用一次，会打印 `2`。两次调用都只修改了 `j`，`i` 一直是 `0`。
+
+#### 父类构造方法为什么会调用子类的方法？
+
+把下面的代码存成 `Base.java`，在 IDEA 运行 `main`。它同时考察**父子类的初始化顺序**和**实例方法的动态分派**。 [Java 语言规范 · 对象创建](https://docs.oracle.com/javase/specs/jls/se25/html/jls-12.html#jls-12.5)
+
+```java
+public class Base {
+    private String baseName = "base";
+
+    public Base() {
+        callName();
+    }
+
+    public void callName() {
+        System.out.println(baseName);
+    }
+
+    static class Sub extends Base {
+        private String baseName = "sub";
+
+        @Override
+        public void callName() {
+            System.out.println(baseName);
+        }
+    }
+
+    public static void main(String[] args) {
+        Base b = new Sub();
+    }
+}
+```
+
+1. `new Sub()` 为一个 `Sub` 对象分配空间。这个对象包含 `Base` 和 `Sub` 分别声明的两个 `baseName` 字段，它们此时都取 `String` 字段的默认值 `null`。
+2. `Sub` 的默认构造方法调用 `super()`。进入 `Base()` 的方法体之前，父类声明的字段已经被赋成 `"base"`。
+3. `Base()` 方法体里的 `callName();` 执行调用，相当于 `this.callName()`。当前对象实际是 `Sub`，所以执行子类重写的 `callName()`。方法体中的 `baseName` 指向 `Sub` 声明的字段，此时它还是 `null`，因此打印一行 `null`。
+4. `Base()` 返回后，子类字段的初始化语句才把它赋成 `"sub"`。至此 `new Sub()` 完成，得到的对象引用交给变量 `b`。
+
+| 运行到哪一步 | `Base` 声明的字段 | `Sub` 声明的字段 | 本步输出 |
+| --- | --- | --- | --- |
+| 刚分配对象 | `null` | `null` | 无 |
+| `Base()` 中调用 `callName()` | `"base"` | `null` | `null` |
+| `Base()` 返回，子类字段初始化 | `"base"` | `"sub"` | 无 |
+| 如果这时另外调用 `b.callName()` | `"base"` | `"sub"` | `sub` |
+
+`public void callName() { ... }` 是方法声明，真正触发输出的是构造方法体里的 `callName();`。字段读取在编译时就已确定，`Sub.callName()` 始终读取子类声明的那个字段，值为 `null` 时也照样读它。两个同名字段各有自己的值。
+
+#### 继承了什么？`private` 和 `protected` 有什么区别？
+
+继承让子类拥有符合规则的父类成员。字段里具体存什么值，则由每个对象的初始化过程和后续赋值决定。例如 `Base` 声明 `protected String name = "base";`，若 `Sub` 继承 `Base` 且没有再声明同名字段，`Sub` 可以直接读取继承来的 `name`。新建 `Sub` 对象时，父类的初始化代码给这个对象里的 `name` 赋成 `"base"`。
+
+| 访问实例字段或方法的位置 | `private` | `protected` |
+| --- | --- | --- |
+| 声明它的类内部 | 可以 | 可以 |
+| 同包、独立的另一个类 | 不可以 | 可以，即使没有继承关系 |
+| 跨包的子类内部 | 不可以 | 可以通过 `this`、`super` 等访问。通过对象引用访问时，引用的编译时类型还必须是该子类或其子类 |
+
+原例中的 `Sub` 嵌套在 `Base` 里面，同一个顶层类内部有权访问 `private` 成员。访问权限和继承是两件事，父类的 `private` 字段不会成为子类继承的成员，但这个字段仍保存在 `Sub` 实例中。原例打印 `null` 的直接原因是 `Sub.callName()` 读到了自己尚未赋初值的字段。 [Java 语言规范 · 访问控制](https://docs.oracle.com/javase/specs/jls/se25/html/jls-6.html#jls-6.6) · [跨包 `protected` 的访问规则](https://docs.oracle.com/javase/specs/jls/se25/html/jls-6.html#jls-6.6.2.1)
+
+#### JVM 怎样判断哪个对象可以回收？
+
+**垃圾回收（GC）**是 JVM 自动回收对象占用的内存。理解可达性时，可以把对象想成储物柜，把引用想成写着柜号的纸条。程序从还能用到的引用出发，沿着对象内部的引用继续找。能沿路径找到的对象是**可达对象**。在下面的例子里，局部变量 `a`、`b` 就是手里的两张纸条，A 的 `ref` 是柜子里存的一张纸条。 [Java 语言规范 · 对象可达性](https://docs.oracle.com/javase/specs/jls/se25/html/jls-12.html#jls-12.6.1)
+
+```java
+public class ReachabilityDemo {
+    static class A {
+        private B ref;
+
+        void setB(B b) {
+            ref = b;
+        }
+    }
+
+    static class B {
+        private A ref;
+
+        void setA(A a) {
+            ref = a;
+        }
+    }
+
+    public static void main(String[] args) {
+        A a = new A();
+        B b = new B();
+
+        a.setB(b);
+        b = null;
+        a = null;
+    }
+}
+```
+
+`a.setB(b)` 把变量 `b` 里存的引用复制给 A 的 `ref`。可以想成把 B 的柜号抄了一份，放进 A 的柜子。虽然 B 声明了 `setA()`，这里没有调用它，所以 B 的 `ref` 仍是 `null`。
+
+```text
+执行 a.setB(b) 后
+a ──► A 对象 ── ref ──► B 对象
+b ────────────────────► B 对象
+
+执行 b = null 后
+a ──► A 对象 ── ref ──► B 对象
+b ──► null
+
+继续执行 a = null 后
+a ──► null
+b ──► null
+```
+
+第一处置空只擦掉手里的 `b` 纸条，A 柜里的副本还在，仍可经 A 找到 B。第二处置空清掉了通往 A 的入口，A 柜里虽然还留着 B 的柜号，但已经走不到那张纸条。按这个引用图，两个对象都已不可达，具备被回收的条件。实际回收时机由 JVM 决定。
+
+**自查。** 如果保留 `b`，只执行 `a = null`，A 已不可达，B 仍可通过 `b` 直接找到。画引用图时先写清正在判断的是哪个对象，再从手里仍有的纸条出发找路径。
+
+**验证。** 本机 Java 验证了 `Foo` 原版编译失败，补构造方法后连续调用输出 `1`、`2`。`Base` 原版输出 `null`，新增 `b.callName()` 后输出 `null`、`sub`。GC 部分按引用关系推演，示例未测量对象实际回收的时刻。
